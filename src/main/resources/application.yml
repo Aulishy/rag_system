@@ -16,10 +16,10 @@ rag:
 
 # 大语言模型配置 (通义千问)
 dashscope:
-  api-key: "sk-3d3799f98b0e42bb98e2d92b7afcc04c"
+  api-key: ""
   model-name: qwen-plus
 
 # 重排模型配置 (Cohere)
 cohere:
-  api-key: "ov1pM4V4w57TqTUUkVbZoRlKtnKrI9tJROBx9HI2"
+  api-key: ""
   model-name: rerank-multilingual-v3.0
