@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: rag
+
+# 向量数据库相关配置 (对应 QdrantProperties 类)
+qdrant:
+  host: localhost
+  port: 6334
+  collection: rag_test_collection
+
+# RAG 文档切分参数配置 (对应 RagDocumentProperties 类)
+rag:
+  document:
+    max-segment-size: 300 # 每个切片的最大字数
+    max-overlap-size: 30  # 相邻切片重叠的字数
+
+# 大语言模型配置 (通义千问)
+dashscope:
+  api-key: "sk-3d3799f98b0e42bb98e2d92b7afcc04c"
+  model-name: qwen-plus
+
+# 重排模型配置 (Cohere)
+cohere:
+  api-key: "ov1pM4V4w57TqTUUkVbZoRlKtnKrI9tJROBx9HI2"
+  model-name: rerank-multilingual-v3.0
