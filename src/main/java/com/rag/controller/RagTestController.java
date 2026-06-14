@@ -1,27 +1,21 @@
 package com.rag.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.rag.knowledge.agent.CustomerSupportAgent;
-import com.rag.knowledge.config.QdrantProperties;
 import com.rag.knowledge.service.DocumentIngestionService;
-import dev.langchain4j.data.embedding.Embedding;
-import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.scoring.ScoringModel;
-import dev.langchain4j.store.embedding.EmbeddingMatch;
-import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.store.embedding.EmbeddingSearchRequest;
-import dev.langchain4j.store.embedding.EmbeddingSearchResult;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/rag")
@@ -34,124 +28,119 @@ public class RagTestController {
     @Autowired
     private DocumentIngestionService ingestionService;
 
-    @Autowired
-    private EmbeddingStore<TextSegment> embeddingStore;
+    /**
+     * 1. 聊天接口（默认使用流式输出 SSE）
+     */
+    @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@RequestBody ChatRequest request) {
 
-    @Autowired
-    private ScoringModel scoringModel;
+        // 校验用户是否登录
+        if (!StpUtil.isLogin()) {
+            throw new RuntimeException("请先登录");
+        }
 
-    @Autowired
-    private EmbeddingModel embeddingModel;
+        String sessionId = request.getSessionId();
+        if (sessionId == null || sessionId.isEmpty()) {
+            throw new RuntimeException("sessionId 不能为空");
+        }
 
-    @Autowired
-    private QdrantProperties qdrantProperties;
-    private final RestTemplate restTemplate = new RestTemplate();
+        System.out.println("收到流式对话请求, sessionId: " + sessionId + ", message: " + request.getMessage());
 
-    @PostMapping("/chat")
-    public Map<String, Object> chat(@RequestBody ChatRequest request) {
-        System.out.println("Received chat request: " + request.getMessage());
+        // 设置超时时间，大模型回复可能较慢，这里设置为 3 分钟 (180000ms)
+        SseEmitter emitter = new SseEmitter(180000L);
+        // 超时自动完成，防止一直挂起
+        emitter.onTimeout(emitter::complete);
+
+        // 调用 Agent 的流式方法 (请确保你的 CustomerSupportAgent 接口中是 chatStream 方法)
+        agent.chatStream(sessionId, request.getMessage())
+                .onNext(token -> {
+                    try {
+                        // 每当大模型吐出一个字（token），立刻通过 SSE 发给前端
+                        emitter.send(token);
+                    } catch (Exception e) {
+                        emitter.completeWithError(e);
+                    }
+                })
+                .onComplete(response -> {
+                    // 大模型回答完毕，发个结束标识给前端并关闭连接
+                    try {
+                        emitter.send("[DONE]");
+                    } catch (Exception e) {
+                        // 忽略异常
+                    }
+                    emitter.complete();
+                })
+                .onError(error -> {
+                    error.printStackTrace();
+                    emitter.completeWithError(error);
+                })
+                .start(); // 必须调用 start() 才能触发流式请求
+
+        return emitter;
+    }
+
+    /**
+     * 2. 文件上传与知识库构建接口
+     */
+    @PostMapping("/upload")
+    public ResponseEntity<Map<String, Object>> uploadDocument(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "tenantId", defaultValue = "default_tenant") String tenantId) {
+
         Map<String, Object> response = new HashMap<>();
+
+        // 校验用户是否登录 (可选，为了数据安全建议保留)
+        if (!StpUtil.isLogin()) {
+            response.put("success", false);
+            response.put("message", "请先登录后再上传文件");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
+
+        if (file.isEmpty()) {
+            response.put("success", false);
+            response.put("message", "上传的文件为空");
+            return ResponseEntity.badRequest().body(response);
+        }
 
         try {
-            String sessionId = request.getSessionId() != null ? request.getSessionId() : "default_session";
-            String answer = agent.chat(sessionId, request.getMessage());
+            // 创建一个临时文件来保存上传的内容
+            String originalFilename = file.getOriginalFilename();
+            String prefix = "upload_";
+            String suffix = originalFilename != null ? "_" + originalFilename : ".tmp";
+
+            Path tempFilePath = Files.createTempFile(prefix, suffix);
+
+            // 将上传的 MultipartFile 内容传输到临时文件中
+            file.transferTo(tempFilePath.toFile());
+
+            System.out.println("收到文件上传请求: " + originalFilename + ", 临时保存至: " + tempFilePath);
+
+            // 调用业务层服务处理该文档，进行解析、切片、向量化并存入 Qdrant
+            ingestionService.ingestDocument(tempFilePath, tenantId);
+
+            // 处理完成后，删除临时文件以释放磁盘空间
+            Files.deleteIfExists(tempFilePath);
+
             response.put("success", true);
-            response.put("sessionId", sessionId);
-            response.put("answer", answer);
-        } catch (Exception e) {
-            response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("message", "文件 '" + originalFilename + "' 上传并处理成功");
+            return ResponseEntity.ok(response);
+
+        } catch (IOException e) {
             e.printStackTrace();
-        }
-
-        return response;
-    }
-
-    @GetMapping("/health")
-    public Map<String, Object> health() {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", "ok");
-        response.put("message", "RAG 服务运行正常");
-        return response;
-    }
-    
-@GetMapping("/debug/vector-check")
-public Map<String, Object> vectorCheck(
-        @RequestParam(defaultValue = "Java基础") String query) {
-    Map<String, Object> result = new HashMap<>();
-    // ① 检查 embedding 模型是否正常
-    Embedding queryEmbedding = embeddingModel.embed(query).content();
-    int queryDim = queryEmbedding.vector().length;
-    result.put("queryVectorDim", queryDim);
-    // ② 用 REST API 读 Qdrant（绕过 gRPC，判断数据是否真的存在）
-    try {
-        String scrollUrl = "http://" + qdrantProperties.getHost() + ":6333/collections/"
-                + qdrantProperties.getCollection() + "/points/scroll";
-        Map<String, Object> scrollBody = Map.of("limit", 1, "with_vector", true);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> scrollResp = restTemplate.postForObject(scrollUrl, scrollBody, Map.class);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> points = (List<Map<String, Object>>)
-                ((Map<String, Object>) scrollResp.get("result")).get("points");
-        if (points == null || points.isEmpty()) {
-            result.put("restVectorDim", 0);
-            result.put("diagnosis", "DATA_ISSUE：Qdrant 里没有数据，请先跑 testIngestion 入库");
-            return result;
-        }
-        @SuppressWarnings("unchecked")
-        List<Double> restVector = (List<Double>) points.get(0).get("vector");
-        int restDim = restVector != null ? restVector.size() : 0;
-        result.put("restVectorDim", restDim);
-        result.put("restPointId", points.get(0).get("id"));
-    } catch (Exception e) {
-        result.put("restError", e.getMessage());
-        result.put("diagnosis", "DATA_ISSUE：无法连接 Qdrant 或 collection 不存在");
-        return result;
-    }
-    // ③ 用 Java gRPC 客户端 search（就是 chat 报错的路径）
-    try {
-        EmbeddingSearchResult<TextSegment> searchResult = embeddingStore.search(
-                EmbeddingSearchRequest.builder()
-                        .queryEmbedding(queryEmbedding)
-                        .maxResults(3)
-                        .build());
-        List<Map<String, Object>> matchDetails = searchResult.matches().stream().map(m -> {
-            Map<String, Object> detail = new HashMap<>();
-            detail.put("id", m.embeddingId());
-            detail.put("storedVectorDim",
-                    m.embedding() != null ? m.embedding().vector().length : -1);
-            detail.put("textPreview", m.embedded() != null
-                    ? m.embedded().text().substring(0, Math.min(30, m.embedded().text().length()))
-                    : null);
-            return detail;
-        }).toList();
-        result.put("grpcMatchCount", searchResult.matches().size());
-        result.put("grpcMatches", matchDetails);
-        int grpcDim = matchDetails.isEmpty() ? -1
-                : (int) matchDetails.get(0).get("storedVectorDim");
-        result.put("grpcStoredVectorDim", grpcDim);
-        // ④ 自动下结论
-        int restDim = (int) result.get("restVectorDim");
-        if (queryDim != 512) {
-            result.put("diagnosis", "EMBEDDING_ISSUE：查询向量维度异常，期望 512，实际 " + queryDim);
-        } else if (restDim == 512 && grpcDim == 0) {
-            result.put("diagnosis", "DEPENDENCY_ISSUE：REST 读到 512 维，gRPC 读到 0 维，是依赖/反序列化问题");
-        } else if (restDim == 0) {
-            result.put("diagnosis", "DATA_ISSUE：Qdrant 里存的向量就是空的，需要重建 collection 并重新入库");
-        } else if (grpcDim == 512) {
-            result.put("diagnosis", "OK：向量正常，chat 报错可能是其他原因");
-        }
-    } catch (Exception e) {
-        result.put("grpcSearchError", e.getMessage());
-        int restDim = (int) result.get("restVectorDim");
-        if (queryDim == 512 && restDim == 512) {
-            result.put("diagnosis", "DEPENDENCY_ISSUE：REST 数据正常但 gRPC search 报错，是依赖问题");
+            response.put("success", false);
+            response.put("message", "文件保存或处理失败: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.put("success", false);
+            response.put("message", "处理文档时发生错误: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
-    return result;
-}
 
-
+    /**
+     * 请求体参数封装类
+     */
     public static class ChatRequest {
         private String message;
         private String sessionId;
