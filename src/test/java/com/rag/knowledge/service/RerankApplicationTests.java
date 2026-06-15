@@ -1,7 +1,8 @@
 package com.rag.knowledge.service;
 
 
-import com.rag.knowledge.agent.CustomerSupportAgent;
+import com.rag.ai.agent.CustomerSupportAgent;
+import com.rag.service.DocumentIngestionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

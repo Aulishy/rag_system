@@ -1,4 +1,4 @@
-package com.rag.knowledge.config;
+package com.rag.ai.model;
 
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.output.Response;

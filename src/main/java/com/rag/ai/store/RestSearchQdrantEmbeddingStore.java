@@ -1,6 +1,6 @@
-package com.rag.knowledge.store;
+package com.rag.ai.store;
 
-import com.rag.knowledge.config.QdrantProperties;
+import com.rag.config.properties.QdrantProperties;
 import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;

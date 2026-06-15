@@ -1,32 +1,35 @@
-package com.rag.knowledge.config;
+package com.rag.config;
 
-import com.rag.knowledge.store.PersistentChatMemoryStore;
-import com.rag.knowledge.store.RestSearchQdrantEmbeddingStore;
+import com.rag.ai.agent.CustomerSupportAgent;
+import com.rag.ai.model.DashScopeScoringModel;
+import com.rag.ai.store.PersistentChatMemoryStore;
+import com.rag.ai.store.RestSearchQdrantEmbeddingStore;
+import com.rag.config.properties.DashscopeProperties;
+import com.rag.config.properties.QdrantProperties;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.scoring.ScoringModel;
-import dev.langchain4j.rag.content.retriever.ContentRetriever;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import com.rag.knowledge.agent.CustomerSupportAgent;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
+import dev.langchain4j.model.dashscope.QwenChatModel;
+import dev.langchain4j.model.dashscope.QwenStreamingChatModel;
+import dev.langchain4j.model.embedding.EmbeddingModel;
+import dev.langchain4j.model.embedding.onnx.bgesmallzhq.BgeSmallZhQuantizedEmbeddingModel;
+import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
 import dev.langchain4j.rag.content.aggregator.ContentAggregator;
 import dev.langchain4j.rag.content.aggregator.ReRankingContentAggregator;
+import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.rag.query.transformer.CompressingQueryTransformer;
 import dev.langchain4j.rag.query.transformer.QueryTransformer;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
-import dev.langchain4j.model.dashscope.QwenStreamingChatModel;
-import dev.langchain4j.model.dashscope.QwenChatModel;
-import dev.langchain4j.model.embedding.onnx.bgesmallzhq.BgeSmallZhQuantizedEmbeddingModel;
 import dev.langchain4j.store.embedding.qdrant.QdrantEmbeddingStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RagAgentConfig {

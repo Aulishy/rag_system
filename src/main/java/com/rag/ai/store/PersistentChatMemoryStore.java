@@ -1,4 +1,4 @@
-package com.rag.knowledge.store;
+package com.rag.ai.store;
 
 import com.rag.entity.ChatHistory;
 import com.rag.mapper.ChatHistoryMapper;

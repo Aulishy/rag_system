@@ -1,4 +1,4 @@
-package com.rag.knowledge.agent;
+package com.rag.ai.agent;
 
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;

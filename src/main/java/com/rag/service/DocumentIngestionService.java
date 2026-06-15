@@ -1,4 +1,4 @@
-package com.rag.knowledge.service;
+package com.rag.service;
 
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.DocumentParser;
@@ -11,7 +11,7 @@ import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import org.springframework.stereotype.Service;
-import com.rag.knowledge.config.RagDocumentProperties;
+import com.rag.config.properties.RagDocumentProperties;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -66,8 +66,8 @@ public class DocumentIngestionService {
         String fileName = filePath.getFileName().toString();//得到要处理的文件名
         //对切分出的片段添加元数据
         for (TextSegment segment : validSegments) {
-            segment.metadata().add("tenant_id", tenantId); // 用于多租户/多部门权限隔离
-            segment.metadata().add("file_name", fileName); // 用于溯源“这句话出自哪本书”
+            segment.metadata().put("tenant_id", tenantId); // 用于多租户/多部门权限隔离
+            segment.metadata().put("file_name", fileName); // 用于溯源“这句话出自哪本书”
         }
 
         // Step 4: 批量生成向量并持久化入库 (Load)

@@ -1,4 +1,4 @@
-package com.rag.knowledge.config;
+package com.rag.config.properties;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
