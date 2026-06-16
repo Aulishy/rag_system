@@ -13,7 +13,7 @@ import java.nio.file.Path;
 
 @RestController
 @RequestMapping("/api/document")
-@CrossOrigin(origins = "*")
+@CrossOrigin(origins = "http://localhost:5173")
 public class DocumentController {
 
     @Autowired

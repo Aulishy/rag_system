@@ -1,57 +1,48 @@
 package com.rag.ai.store;
 
 import com.rag.entity.ChatHistory;
-import com.rag.mapper.ChatHistoryMapper;
+import com.rag.service.ChatHistoryService;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ChatMessageDeserializer;
 import dev.langchain4j.data.message.ChatMessageSerializer;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
 public class PersistentChatMemoryStore implements ChatMemoryStore {
-
+    private static final Logger logger = LoggerFactory.getLogger(PersistentChatMemoryStore.class);
     @Autowired
-    private ChatHistoryMapper chatHistoryMapper;
+    private ChatHistoryService chatHistoryService;
 
-    // 1. AI 聊天前，自动调用此方法从数据库读取之前的对话
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
-        String sessionId = (String) memoryId;
-        ChatHistory history = chatHistoryMapper.selectById(sessionId);
+        logger.info("获取会话，会话ID: {}", memoryId);
+        ChatHistory history = chatHistoryService.getById((String) memoryId);
         if (history != null && history.getHistoryJson() != null) {
-            // 将 JSON 字符串反序列化为 LangChain4j 认识的 Message 对象
             return ChatMessageDeserializer.messagesFromJson(history.getHistoryJson());
         }
         return new ArrayList<>();
-    }
+    }//从数据库中获取会话历史
 
-    // 2. AI 回复后，自动调用此方法把最新的对话保存到数据库
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
-        String sessionId = (String) memoryId;
-        // 将对话序列化为 JSON 字符串
-        String json = ChatMessageSerializer.messagesToJson(messages);
+        logger.info("插入会话，会话ID: {}", memoryId);
+        logger.info("会话信息: {}", messages);
+        ChatHistory history = new ChatHistory();
+        history.setSessionId((String) memoryId);
+        history.setHistoryJson(ChatMessageSerializer.messagesToJson(messages));
+        // MyBatis-Plus 神器：如果有这个 ID 就更新，没有就插入！一句代码替代以前的一大段 if-else！
+        chatHistoryService.saveOrUpdate(history);
+    }//更新会话历史到数据库
 
-        ChatHistory history = chatHistoryMapper.selectById(sessionId);
-        if (history == null) {
-            history = new ChatHistory();
-            history.setSessionId(sessionId);
-            history.setHistoryJson(json);
-            chatHistoryMapper.insert(history);
-        } else {
-            history.setHistoryJson(json);
-            chatHistoryMapper.updateById(history);
-        }
-    }
-
-    // 3. 删除记忆
     @Override
     public void deleteMessages(Object memoryId) {
-        chatHistoryMapper.deleteById((String) memoryId);
-    }
+        logger.info("删除会话，会话ID: {}", memoryId);
+        chatHistoryService.removeById((String) memoryId);
+    }//从数据库中删除会话历史
 }

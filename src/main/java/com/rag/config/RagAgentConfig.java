@@ -22,6 +22,7 @@ import dev.langchain4j.rag.content.aggregator.ReRankingContentAggregator;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.rag.query.transformer.CompressingQueryTransformer;
+import dev.langchain4j.rag.query.transformer.DefaultQueryTransformer;
 import dev.langchain4j.rag.query.transformer.QueryTransformer;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
@@ -30,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Scope;
 
 @Configuration
 public class RagAgentConfig {
@@ -39,15 +41,6 @@ public class RagAgentConfig {
     @Bean
     public StreamingChatLanguageModel streamingChatLanguageModel(DashscopeProperties properties) {
         return QwenStreamingChatModel.builder()
-                .apiKey(properties.getApiKey())
-                .modelName(properties.getModelName())
-                .build();
-    }
-
-    // 新增：标准的非流式模型 Bean，专门供 QueryTransformer 等内部不需要流式输出的组件使用
-    @Bean
-    public ChatLanguageModel chatLanguageModel(DashscopeProperties properties) {
-        return QwenChatModel.builder()
                 .apiKey(properties.getApiKey())
                 .modelName(properties.getModelName())
                 .build();
@@ -74,35 +67,35 @@ public class RagAgentConfig {
     }
 
     @Bean
+    @Scope("prototype") // 将 Agent 设置为原型作用域，确保每个请求都获得一个新实例
     public CustomerSupportAgent customerSupportAgent(
-            StreamingChatLanguageModel streamingChatLanguageModel, // 只注入流式模型
-            ChatLanguageModel chatLanguageModel,                   // 注入非流式模型
-            EmbeddingModel embeddingModel,
-            EmbeddingStore<TextSegment> qdrantStore,
-            ScoringModel scoringModel,
-            PersistentChatMemoryStore persistentChatMemoryStore
+            StreamingChatLanguageModel streamingChatLanguageModel,//流式聊天模型
+            EmbeddingModel embeddingModel,//词嵌入模型
+            EmbeddingStore<TextSegment> qdrantStore,//向量数据库
+            ScoringModel scoringModel,//评分模型
+            PersistentChatMemoryStore persistentChatMemoryStore//聊天记忆存储
     ) {
 
-        // 直接将非流式模型传入 QueryTransformer，完美避开 Adapter 的依赖问题
-        QueryTransformer queryTransformer = new CompressingQueryTransformer(chatLanguageModel);
-
+        QueryTransformer queryTransformer = new DefaultQueryTransformer();
+        log.info("queryTransformer:", queryTransformer);
         ContentRetriever contentRetriever = EmbeddingStoreContentRetriever.builder()
-                .embeddingStore(qdrantStore)
-                .embeddingModel(embeddingModel)
-                .maxResults(10)
+                .embeddingStore(qdrantStore)// 设置嵌入存储
+                .embeddingModel(embeddingModel)// 设置嵌入模型
+                .maxResults(10)// 设置最大结果数
+                .minScore(0.6)// 设置最小分数
                 .build();
 
         ContentAggregator contentAggregator = ReRankingContentAggregator.builder()
-                .scoringModel(scoringModel)
+                .scoringModel(scoringModel)// 设置评分模型
                 .build();
 
         RetrievalAugmentor retrievalAugmentor = DefaultRetrievalAugmentor.builder()
-                .queryTransformer(queryTransformer)
-                .contentRetriever(contentRetriever)
-                .contentAggregator(contentAggregator)
+                .queryTransformer(queryTransformer)// 设置查询转换器
+                .contentRetriever(contentRetriever)// 设置内容检索器
+                .contentAggregator(contentAggregator)// 设置内容聚合器
                 .build();
 
-        log.info("CustomerSupportAgent 初始化完成 - 使用默认检索器");
+        log.info("CustomerSupportAgent 初始化完成 - 使用默认检索器 (暂未启用 QueryTransformer)");
 
         return AiServices.builder(CustomerSupportAgent.class)
                 .streamingChatLanguageModel(streamingChatLanguageModel)
