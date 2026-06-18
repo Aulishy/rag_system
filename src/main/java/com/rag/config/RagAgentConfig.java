@@ -2,10 +2,12 @@ package com.rag.config;
 
 import com.rag.ai.agent.CustomerSupportAgent;
 import com.rag.ai.model.DashScopeScoringModel;
+import com.rag.ai.store.ArchivingRedisChatMemoryStore;
 import com.rag.ai.store.PersistentChatMemoryStore;
 import com.rag.ai.store.RestSearchQdrantEmbeddingStore;
 import com.rag.config.properties.DashscopeProperties;
 import com.rag.config.properties.QdrantProperties;
+import com.rag.service.ChatHistoryService;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -13,7 +15,7 @@ import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.dashscope.QwenChatModel;
 import dev.langchain4j.model.dashscope.QwenStreamingChatModel;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import dev.langchain4j.model.embedding.onnx.bgesmallzhq.BgeSmallZhQuantizedEmbeddingModel;
+import dev.langchain4j.model.embedding.onnx.bgesmallzhv15q.BgeSmallZhV15QuantizedEmbeddingModel;
 import dev.langchain4j.model.scoring.ScoringModel;
 import dev.langchain4j.rag.DefaultRetrievalAugmentor;
 import dev.langchain4j.rag.RetrievalAugmentor;
@@ -27,11 +29,15 @@ import dev.langchain4j.rag.query.transformer.QueryTransformer;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import dev.langchain4j.store.embedding.qdrant.QdrantEmbeddingStore;
+import dev.langchain4j.store.memory.chat.redis.RedisChatMemoryStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 @Configuration
 public class RagAgentConfig {
@@ -47,13 +53,41 @@ public class RagAgentConfig {
     }
 
     @Bean
+    public ThreadPoolTaskExecutor asyncTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(5); // 核心线程数
+        executor.setMaxPoolSize(10); // 最大线程数
+        executor.setQueueCapacity(25); // 队列容量
+        executor.setThreadNamePrefix("Async-Archive-");
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * 新增：创建我们自定义的、带异步归档功能的 ChatMemoryStore Bean。
+     */
+    @Bean
+    public ArchivingRedisChatMemoryStore archivingRedisChatMemoryStore(
+            StringRedisTemplate stringRedisTemplate,
+            ChatHistoryService chatHistoryService,
+            ThreadPoolTaskExecutor asyncTaskExecutor) {
+
+        return new ArchivingRedisChatMemoryStore(
+                stringRedisTemplate,
+                chatHistoryService,
+                asyncTaskExecutor,
+                java.time.Duration.ofHours(24)
+        );
+    }
+
+    @Bean
     public ScoringModel scoringModel(DashscopeProperties properties) {
         return new DashScopeScoringModel(properties.getApiKey(), "qwen3-vl-rerank");
     }
 
     @Bean
     public EmbeddingModel embeddingModel() {
-        return new BgeSmallZhQuantizedEmbeddingModel();
+        return new BgeSmallZhV15QuantizedEmbeddingModel();
     }
 
     @Bean

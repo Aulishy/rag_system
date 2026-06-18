@@ -22,22 +22,46 @@ public class PersistentChatMemoryStore implements ChatMemoryStore {
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
         logger.info("获取会话，会话ID: {}", memoryId);
-        ChatHistory history = chatHistoryService.getById((String) memoryId);
-        if (history != null && history.getHistoryJson() != null) {
-            return ChatMessageDeserializer.messagesFromJson(history.getHistoryJson());
+
+        try {
+            ChatHistory history = chatHistoryService.getById((String) memoryId);
+            if (history != null && history.getHistoryJson() != null) {
+                logger.info("找到历史数据，JSON长度: {} 字符", history.getHistoryJson().length());
+                return ChatMessageDeserializer.messagesFromJson(history.getHistoryJson());
+            } else {
+                logger.info("未找到历史数据，返回空列表");
+            }
+        } catch (Exception e) {
+            logger.error("获取会话历史时发生异常，sessionId: {}", memoryId, e);
         }
+
         return new ArrayList<>();
     }//从数据库中获取会话历史
 
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
         logger.info("插入会话，会话ID: {}", memoryId);
-        logger.info("会话信息: {}", messages);
-        ChatHistory history = new ChatHistory();
-        history.setSessionId((String) memoryId);
-        history.setHistoryJson(ChatMessageSerializer.messagesToJson(messages));
-        // MyBatis-Plus 神器：如果有这个 ID 就更新，没有就插入！一句代码替代以前的一大段 if-else！
-        chatHistoryService.saveOrUpdate(history);
+        logger.info("消息数量: {}", messages.size());
+
+        try {
+            ChatHistory history = new ChatHistory();
+            history.setSessionId((String) memoryId);
+            String json = ChatMessageSerializer.messagesToJson(messages);
+            history.setHistoryJson(json);
+
+            logger.debug("准备保存的JSON长度: {} 字符", json.length());
+
+            boolean success = chatHistoryService.saveOrUpdate(history);
+
+            if (success) {
+                logger.info("✅ 会话历史保存成功，sessionId: {}", memoryId);
+            } else {
+                logger.error("❌ 会话历史保存失败，sessionId: {}", memoryId);
+            }
+        } catch (Exception e) {
+            logger.error("❌ 保存会话历史时发生异常，sessionId: {}", memoryId, e);
+            throw e;
+        }
     }//更新会话历史到数据库
 
     @Override

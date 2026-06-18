@@ -4,6 +4,8 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.rag.ai.agent.CustomerSupportAgent;
 import com.rag.ai.store.PersistentChatMemoryStore;
 import com.rag.model.dto.ChatReqDTO;
+import dev.langchain4j.data.message.ChatMessage;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -12,7 +14,10 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -23,6 +28,8 @@ public class ChatController {
     @Autowired
     private CustomerSupportAgent agent;
 
+    @Autowired
+    private ObjectProvider<CustomerSupportAgent> agentProvider;
     @Autowired
     private PersistentChatMemoryStore persistentChatMemoryStore;
 
@@ -47,8 +54,9 @@ public class ChatController {
         emitter.onTimeout(emitter::complete);
 
         // 标记客户端是否已断开连接
-        boolean[] isClientClosed = {false}; 
-
+        boolean[] isClientClosed = {false};
+        // 2. 【关键修复】每次请求到来时，现场向 Spring 索要一个全新的 Prototype 实例
+        CustomerSupportAgent agent = agentProvider.getObject();
         // 3. 调用 Agent
         agent.chatStream(request.getSessionId(), request.getMessage())
                 .onNext(token -> {
@@ -80,7 +88,39 @@ public class ChatController {
 
         return emitter;
     }
+    @GetMapping("/history")
+    public ResponseEntity<?> getChatHistory(@RequestParam String sessionId) {
+        if (!StpUtil.isLogin()) {
+            throw new RuntimeException("请先登录");
+        }
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("sessionId 不能为空");
+        }
 
+        // 从数据库中获取历史
+        List<ChatMessage> messages = persistentChatMemoryStore.getMessages(sessionId);
+
+        // 转换为前端友好的格式
+        List<Map<String, Object>> history = messages.stream()
+                .filter(msg -> !(msg instanceof dev.langchain4j.data.message.SystemMessage)) // 过滤系统消息
+                .map(msg -> {
+                    Map<String, Object> item = new HashMap<>();
+                    if (msg instanceof dev.langchain4j.data.message.UserMessage) {
+                        item.put("role", "user");
+                        item.put("content", ((dev.langchain4j.data.message.UserMessage) msg).contents().get(0).toString());
+                    } else if (msg instanceof dev.langchain4j.data.message.AiMessage) {
+                        item.put("role", "assistant");
+                        item.put("content", ((dev.langchain4j.data.message.AiMessage) msg).text());
+                    }
+                    return item;
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(Map.of(
+                "code", 200,
+                "data", history
+        ));
+    }
     /**
      * 清空当前会话的历史记录
      * 当前端开始新对话，或遇到历史记录错乱时可调用此接口清理脏数据
