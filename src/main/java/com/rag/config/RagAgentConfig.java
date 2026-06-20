@@ -48,10 +48,16 @@ public class RagAgentConfig {
     public StreamingChatLanguageModel streamingChatLanguageModel(DashscopeProperties properties) {
         return QwenStreamingChatModel.builder()
                 .apiKey(properties.getApiKey())
-                .modelName(properties.getModelName())
+                .modelName(properties.getStreamingChatModel().getModelName())
                 .build();
     }
-
+    @Bean
+    public ChatLanguageModel visionLanguageModel(DashscopeProperties properties) {
+        return QwenChatModel.builder()
+                .apiKey(properties.getApiKey())
+                .modelName(properties.getVisionModel().getModelName())
+                .build();
+    }
     @Bean
     public ThreadPoolTaskExecutor asyncTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

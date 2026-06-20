@@ -8,7 +8,12 @@ import org.springframework.stereotype.Component;
 public class DashscopeProperties {
 
     private String apiKey;
-    private String modelName = "qwen-plus"; // 设置一个默认模型
+
+    private ChatModel chatModel = new ChatModel();
+
+    private StreamingChatModel streamingChatModel = new StreamingChatModel();
+
+    private VisionModel visionModel = new VisionModel();
 
     public String getApiKey() {
         return apiKey;
@@ -18,7 +23,72 @@ public class DashscopeProperties {
         this.apiKey = apiKey;
     }
 
-    public String getModelName() { return modelName; }
+    public ChatModel getChatModel() {
+        return chatModel;
+    }
 
-    public void setModelName(String modelName) { this.modelName = modelName; }
+    public void setChatModel(ChatModel chatModel) {
+        this.chatModel = chatModel;
+    }
+
+    public StreamingChatModel getStreamingChatModel() {
+        return streamingChatModel;
+    }
+
+    public void setStreamingChatModel(StreamingChatModel streamingChatModel) {
+        this.streamingChatModel = streamingChatModel;
+    }
+
+    public VisionModel getVisionModel() {
+        return visionModel;
+    }
+
+    public void setVisionModel(VisionModel visionModel) {
+        this.visionModel = visionModel;
+    }
+
+    /**
+     * 同步聊天模型配置
+     */
+    public static class ChatModel {
+        private String modelName = "qwen-plus";
+
+        public String getModelName() {
+            return modelName;
+        }
+
+        public void setModelName(String modelName) {
+            this.modelName = modelName;
+        }
+    }
+
+    /**
+     * 流式聊天模型配置
+     */
+    public static class StreamingChatModel {
+        private String modelName = "qwen-turbo";
+
+        public String getModelName() {
+            return modelName;
+        }
+
+        public void setModelName(String modelName) {
+            this.modelName = modelName;
+        }
+    }
+
+    /**
+     * 视觉模型配置（多模态）
+     */
+    public static class VisionModel {
+        private String modelName = "qwen-vl-max";
+
+        public String getModelName() {
+            return modelName;
+        }
+
+        public void setModelName(String modelName) {
+            this.modelName = modelName;
+        }
+    }
 }
